@@ -35,7 +35,8 @@ jobs:
           OPENSSL_STATIC: yes
           OPENSSL_INCLUDE_DIR: /usr/include/openssl
           # OPENSSL_LIB_DIR: /usr/lib64 
-          OPENSSL_LIB_DIR: /usr/lib/x86_64-linux-gnu 
+          OPENSSL_LIB_DIR: /usr/lib/x86_64-linux-gnu
+          OPENSSL_DIR: /usr/include/x86_64-linux-gnu
 
         run: cargo build --release --target x86_64-unknown-linux-musl
 
