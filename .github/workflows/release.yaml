@@ -34,6 +34,7 @@ jobs:
       - name: Build application
         env:
           OPENSSL_STATIC: yes
+          OPENSSL_NO_VENDOR: 1
           OPENSSL_INCLUDE_DIR: /usr/include/openssl
           # OPENSSL_LIB_DIR: /usr/lib64 
           OPENSSL_LIB_DIR: /usr/lib/x86_64-linux-gnu
