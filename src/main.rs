@@ -11,9 +11,9 @@ use minio::s3::{
     creds::StaticProvider,
 };
 
-use uuid::Uuid;
 use std::fs::{remove_file, File};
 use tar;
+use uuid::Uuid;
 
 type GenericErr = Box<dyn std::error::Error + Send + Sync>;
 
@@ -35,15 +35,15 @@ enum Cli {
 
 async fn ensure_bucket(client: &Client, bucket: &str) {
     let exists: bool = client
-        .bucket_exists(&BucketExistsArgs::new(&bucket).unwrap())
+        .bucket_exists(&BucketExistsArgs::new(&bucket).expect("Invalid bucket name"))
         .await
-        .unwrap();
+        .expect("Failed to validate bucket");
 
     if !exists {
         client
-            .make_bucket(&MakeBucketArgs::new(&bucket).unwrap())
+            .make_bucket(&MakeBucketArgs::new(&bucket).expect("Invalid bucket name"))
             .await
-            .unwrap();
+            .expect("Failed to create bucket");
     }
 }
 
@@ -55,22 +55,18 @@ async fn upload_file(
 ) -> Result<(), GenericErr> {
     ensure_bucket(client, bucket).await;
     // Lire le fichier à uploader
-    let mut file = File::open(&filename).unwrap();
-    let file_size = file.metadata().unwrap().len();
+    let mut file = File::open(&filename)?;
+    let file_size = file.metadata()?.len();
 
     client
-        .put_object(
-            &mut PutObjectArgs::new(
-                bucket,
-                object_path,
-                &mut file,
-                Some(file_size as usize),
-                None,
-            )
-            .unwrap(),
-        )
-        .await
-        .unwrap();
+        .put_object(&mut PutObjectArgs::new(
+            bucket,
+            object_path,
+            &mut file,
+            Some(file_size as usize),
+            None,
+        )?)
+        .await?;
 
     Ok(())
 }
@@ -113,10 +109,8 @@ async fn upload_artifacts(
     });
     upload_file(&client, bucket, &filename, &object)
         .await
-        // TODO: handle err
-        .unwrap();
-    // TODO: handle err
-    remove_file(filename).unwrap();
+        .expect("Failed to upload file");
+    remove_file(filename).expect("Failed to remove artifact archive");
     info!("Uploaded files at {:?} to {}/{}", dirs, bucket, object);
     object.to_string()
 }
