@@ -25,10 +25,11 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+          target: x86_64-unknown-linux-musl
           override: true
 
       - name: Build application
-        run: cargo build --release --target=x86_64-unknown-linux-musl
+        run: cargo build --release
 
       - name: Archive binaries
         uses: actions/upload-artifact@v3
