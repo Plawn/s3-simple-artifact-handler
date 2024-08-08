@@ -16,7 +16,11 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest    
+    env:
+      RUSTFLAGS: '-C target-feature=+crt-static'
+      OPENSSL_STATIC: 1
+      OPENSSL_DIR: /usr/local/openssl
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -28,17 +32,25 @@ jobs:
           target: x86_64-unknown-linux-musl
           override: true
 
-      - name: Install openssl
-        run: sudo apt-get install pkg-config libssl-dev musl-tools -y
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools libssl-dev pkg-config
+          wget https://www.openssl.org/source/openssl-1.1.1k.tar.gz
+          tar xzf openssl-1.1.1k.tar.gz
+          cd openssl-1.1.1k
+          ./config no-shared --prefix=/usr/local/openssl --openssldir=/usr/local/openssl
+          make -j$(nproc)
+          sudo make install
       
       - name: Build application
-        env:
-          OPENSSL_STATIC: yes
-          OPENSSL_NO_VENDOR: 1
-          OPENSSL_INCLUDE_DIR: /usr/include/openssl
-          # OPENSSL_LIB_DIR: /usr/lib64 
-          OPENSSL_LIB_DIR: /usr/lib/x86_64-linux-gnu
-          OPENSSL_DIR: /usr/include/x86_64-linux-gnu
+        # env:
+        #   OPENSSL_STATIC: yes
+        #   OPENSSL_NO_VENDOR: 1
+        #   OPENSSL_INCLUDE_DIR: /usr/include/openssl
+        #   # OPENSSL_LIB_DIR: /usr/lib64 
+        #   OPENSSL_LIB_DIR: /usr/lib/x86_64-linux-gnu
+        #   OPENSSL_DIR: /usr/include/x86_64-linux-gnu
 
         run: cargo build --release --target x86_64-unknown-linux-musl
 
