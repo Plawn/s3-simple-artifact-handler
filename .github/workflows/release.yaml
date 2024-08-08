@@ -12,7 +12,7 @@ on:
     #   - started
     #   - created
     #   - completed
-    condition: ${{ contains(github.event.head_commit.message, '[release]') }}
+    # condition: ${{ contains(github.event.head_commit.message, '[release]') }}
 
 jobs:
   build:
