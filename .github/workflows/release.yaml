@@ -33,8 +33,8 @@ jobs:
       - name: Build application
         env:
           OPENSSL_STATIC: yes
-          # OPENSSL_INCLUDE_DIR: /usr/include/openssl
-          # OPENSSL_LIB_DIR: /usr/lib64 
+          OPENSSL_INCLUDE_DIR: /usr/include/openssl
+          OPENSSL_LIB_DIR: /usr/lib64 
         run: cargo build --release
 
       - name: Archive binaries
