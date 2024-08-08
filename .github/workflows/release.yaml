@@ -49,6 +49,7 @@ jobs:
           VERSION=$(date +'%Y.%m.%d-%H%M%S')
           git tag $VERSION
           git push origin $VERSION
+          echo "::set-output name=TAG_NAME::$VERSION"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
