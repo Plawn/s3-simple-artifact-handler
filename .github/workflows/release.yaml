@@ -1,25 +1,35 @@
 on:
   push:
     # Sequence of patterns matched against refs/tags
-    tags:
+    branches:
       - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
 
 name: Create Release
 
 jobs:
-  release:
-    name: release ${{ matrix.target }}
+  build:
+    name: Build
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        target: [x86_64-pc-windows-gnu, x86_64-unknown-linux-musl]
     steps:
       - uses: actions/checkout@master
-      - name: Compile and release
+      - name: Compile
+        id: compile
         uses: rust-build/rust-build.action@v1.4.5
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          RUSTTARGET: ${{ matrix.target }}
-          EXTRA_FILES: "readme.md"
+          RUSTTARGET: x86_64-unknown-linux-musl
+          UPLOAD_MODE: none
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          body: |
+            Changes in this Release
+            - First Change
+            - Second Change
+          draft: false
+          prerelease: false
