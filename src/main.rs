@@ -91,6 +91,8 @@ fn prepare_tar(paths: &Vec<PathBuf>) -> Result<String, GenericErr> {
     }
     tar_builder.finish()?;
 
+
+    
     Ok(tar_name.into())
 }
 

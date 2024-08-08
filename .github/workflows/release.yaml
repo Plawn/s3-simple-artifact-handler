@@ -31,7 +31,7 @@ name: Build
 
 on:
   push:
-    branches: [main]
+    branches: [master]
 
 jobs:
   build:
