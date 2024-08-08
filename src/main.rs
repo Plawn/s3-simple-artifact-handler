@@ -10,6 +10,8 @@ use minio::s3::{
     client::{Client, ClientBuilder},
     creds::StaticProvider,
 };
+
+use uuid::Uuid;
 use std::fs::{remove_file, File};
 use tar;
 
@@ -20,6 +22,7 @@ enum Cli {
     Upload {
         /// Bucket to upload the file to (will be created if it doesn't exist)
         bucket: String,
+        object: Option<String>,
         /// File to upload.
         files: Vec<PathBuf>,
     },
@@ -75,7 +78,6 @@ fn recurse_files(path: impl AsRef<str>) -> Result<Vec<PathBuf>, PatternError> {
     let k = glob(path.as_ref()).map(|res| res.into_iter().map(|e| e.unwrap()).collect::<Vec<_>>());
     k
 }
-
 fn prepare_tar(paths: &Vec<PathBuf>) -> Result<String, GenericErr> {
     let tar_name = "export.tar.gz";
 
@@ -96,12 +98,24 @@ fn prepare_tar(paths: &Vec<PathBuf>) -> Result<String, GenericErr> {
     Ok(tar_name.into())
 }
 
-async fn upload_artifacts(client: &Client, bucket: &str, dirs: &Vec<PathBuf>) -> String {
+async fn upload_artifacts(
+    client: &Client,
+    bucket: &str,
+    dirs: &Vec<PathBuf>,
+    object: Option<String>,
+) -> String {
     let filename = prepare_tar(&dirs).unwrap();
-    let object = "frhfoierhferpih";
-    upload_file(&client, bucket, &filename, object)
+    // TODO: generate random name
+
+    let object = object.unwrap_or_else(|| {
+        let id = Uuid::new_v4();
+        id.to_string()
+    });
+    upload_file(&client, bucket, &filename, &object)
         .await
+        // TODO: handle err
         .unwrap();
+    // TODO: handle err
     remove_file(filename).unwrap();
     info!("Uploaded files at {:?} to {}/{}", dirs, bucket, object);
     object.to_string()
@@ -117,10 +131,12 @@ async fn download_artifacts(
     client
         .download_object(&DownloadObjectArgs::new(bucket, object_path, &local_path).unwrap())
         .await
+        // TODO: handle err
         .unwrap();
     let tar = File::open(local_path).unwrap();
     let dec = GzDecoder::new(tar);
     let mut a = tar::Archive::new(dec);
+    // TODO: handle err
     a.unpack(decode_location).unwrap();
 }
 
@@ -128,19 +144,25 @@ async fn download_artifacts(
 async fn main() -> Result<(), GenericErr> {
     let args = Cli::parse();
 
-    let static_provider = StaticProvider::new(
-        "Q3AM3UQ867SPQQA43P2F",
-        "zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG",
-        None,
-    );
+    // TODO: take provider from  stdin
 
-    let client = ClientBuilder::new("https://play.min.io".parse()?)
+    let access_key = "Q3AM3UQ867SPQQA43P2F";
+    let password_key = "zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG";
+    let endpoint = "https://play.min.io";
+
+    let static_provider = StaticProvider::new(access_key, password_key, None);
+
+    let client = ClientBuilder::new(endpoint.parse()?)
         .provider(Some(Box::new(static_provider)))
         .build()?;
 
     let result = match args {
-        Cli::Upload { bucket, files } => {
-            let archive_name = upload_artifacts(&client, &bucket, &files).await;
+        Cli::Upload {
+            bucket,
+            files,
+            object,
+        } => {
+            let archive_name = upload_artifacts(&client, &bucket, &files, object).await;
             // write archive name to file
             println!("{}", &archive_name);
         }
