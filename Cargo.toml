@@ -8,11 +8,14 @@ edition = "2021"
 [dependencies]
 clap = { version = "4.5.13", features = ["derive"] }
 log = "0.4.22"
-minio = "0.1.0"
-tokio = "1.39.2"
+tokio =  { version = "1.39.2", features = ["full"] }
 tar = "0.4.41"
 glob = "0.3.1"
 flate2 = "1.0.20"
+rust-s3 = "0.34.0"
+tokio-stream = "0.1.15"
+aws-region = "0.25.4"
+aws-creds = "0.37.0"
 
 [dependencies.uuid]
 version = "1.10.0"
