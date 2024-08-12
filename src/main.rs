@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::path::PathBuf;
 
 use awsregion::Region;
@@ -7,8 +8,6 @@ use flate2::{read::GzDecoder, Compression};
 use glob::{glob, PatternError};
 use log::info;
 use s3::creds::Credentials;
-use tokio::io::AsyncWriteExt;
-use tokio_stream::StreamExt;
 use s3::{Bucket, BucketConfiguration};
 use std::fs::{remove_file, File};
 use tar;
@@ -32,32 +31,27 @@ enum Cli {
     },
 }
 
-async fn ensure_bucket(bucket: Bucket) -> Result<Bucket, GenericErr> {
-    if !bucket.exists().await? {
+fn ensure_bucket(bucket: Bucket) -> Result<Bucket, GenericErr> {
+    if !bucket.exists()? {
         let r = Bucket::create_with_path_style(
             &bucket.name,
             bucket.region.clone(),
-            bucket.credentials().await.unwrap(),
+            bucket.credentials().unwrap(),
             BucketConfiguration::default(),
-        )
-        .await?
+        )?
         .bucket;
         return Ok(r);
     }
     Ok(bucket)
 }
 
-async fn upload_file(bucket: Bucket, filename: &str, object_path: &str) -> Result<(), GenericErr> {
+fn upload_file(bucket: Bucket, filename: &str, object_path: &str) -> Result<(), GenericErr> {
     println!("uploading: {}", &filename);
-    let bucket = ensure_bucket(bucket).await?;
+    let bucket = ensure_bucket(bucket)?;
     // println!("bucket is ok");
-    let mut async_output_file = tokio::fs::File::open(filename)
-        .await
-        .expect("Unable to create file");
+    let mut async_output_file = File::open(filename).expect("Unable to create file");
     // let file_size = file.metadata()?.len();
-    let status_code = bucket
-        .put_object_stream(&mut async_output_file, object_path)
-        .await?;
+    let status_code = bucket.put_object_stream(&mut async_output_file, object_path)?;
 
     Ok(())
 }
@@ -78,14 +72,15 @@ fn prepare_tar(paths: &Vec<PathBuf>) -> Result<String, GenericErr> {
         .map(|e| recurse_files(&e.to_str().unwrap()))
         .flat_map(|e| e.unwrap());
     for name in files {
-        tar_builder.append_path(name)?;
+        tar_builder.append_path(&name)?;
+        info!("Added {:?}", name.to_str());
     }
     tar_builder.finish()?;
 
     Ok(tar_name.into())
 }
 
-async fn upload_artifacts(bucket: Bucket, dirs: &Vec<PathBuf>, object: Option<String>) -> String {
+fn upload_artifacts(bucket: Bucket, dirs: &Vec<PathBuf>, object: Option<String>) -> String {
     let filename = prepare_tar(&dirs).unwrap();
     // TODO: generate random name
 
@@ -94,28 +89,23 @@ async fn upload_artifacts(bucket: Bucket, dirs: &Vec<PathBuf>, object: Option<St
         id.to_string()
     });
     let name = &bucket.name.clone();
-    upload_file(bucket, &filename, &object)
-        .await
-        .expect("Failed to upload file");
+    upload_file(bucket, &filename, &object).expect("Failed to upload file");
     remove_file(filename).expect("Failed to remove artifact archive");
     info!("Uploaded files at {:?} to {}/{}", dirs, name, object);
     object.to_string()
 }
 
 
-async fn download_artifacts(
+fn download_artifacts(
     bucket: &Bucket,
     object_path: &str,
     local_path: &str,
     decode_location: &str,
 ) -> Result<(), GenericErr> {
-    let mut response_data_stream = bucket.get_object_stream(object_path).await?;
-    let mut async_output_file = tokio::fs::File::create(local_path)
-        .await
-        .expect("Unable to create file");
-    while let Some(chunk) = response_data_stream.bytes().next().await {
-        async_output_file.write_all(&chunk.unwrap()).await?;
-    }
+    let mut async_output_file = File::create(local_path).expect("Unable to create file");
+    let response_data_stream = bucket.get_object(object_path)?;
+    async_output_file.write_all(response_data_stream.bytes())?;
+    // println!("file downloaded: {}", response_data_stream);
     let tar = File::open(local_path).unwrap();
     let dec = GzDecoder::new(tar);
     let mut a = tar::Archive::new(dec);
@@ -124,8 +114,7 @@ async fn download_artifacts(
     Ok(())
 }
 
-#[tokio::main]
-async fn main() -> Result<(), GenericErr> {
+fn main() -> Result<(), GenericErr> {
     let args = Cli::parse();
 
     // TODO: take provider from  stdin
@@ -146,16 +135,15 @@ async fn main() -> Result<(), GenericErr> {
         endpoint: "https://play.min.io".to_owned(),
     };
     let credentials = Credentials::new(Some(access_key), Some(password_key), None, None, None)?;
-
     // let static_provider = StaticProvider::new(access_key, password_key, None);
 
     // let client = ClientBuilder::new(endpoint.parse()?)
     //     .provider(Some(Box::new(static_provider)))
     //     .build()?;
-    
+
     // println!("bucket exists: {}", client.bucket_exists(&BucketArgs::new("bucket")?).await?);
     // client.make_bucket(&MakeBucketArgs::new("bucket")?).await.ok();
-    
+
     let result = match args {
         Cli::Upload {
             bucket: bucket_name,
@@ -163,7 +151,8 @@ async fn main() -> Result<(), GenericErr> {
             // object,
         } => {
             let bucket = Bucket::new(&bucket_name, region, credentials)?.with_path_style();
-            let archive_name = upload_artifacts(bucket, &files, None).await;
+            println!("{:?}", &bucket);
+            let archive_name = upload_artifacts(bucket, &files, None);
             // write archive name to file
             println!("{}", &archive_name);
         }
@@ -173,8 +162,9 @@ async fn main() -> Result<(), GenericErr> {
         } => {
             let download_path = "local_download.tar.gz";
             let decode_location = ".";
-            let bucket = Bucket::new(&bucket_name, region, credentials)?;
-            download_artifacts(&bucket, &object, download_path, decode_location).await?;
+            let bucket = Bucket::new(&bucket_name, region, credentials)?.with_path_style();
+            println!("downloading :{}", &object);
+            download_artifacts(&bucket, &object, download_path, decode_location)?;
             remove_file(download_path).unwrap();
         }
     };
