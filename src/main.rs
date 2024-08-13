@@ -6,7 +6,7 @@ use clap::Parser;
 use flate2::write::GzEncoder;
 use flate2::{read::GzDecoder, Compression};
 use glob::{glob, PatternError};
-use log::info;
+use log::debug;
 use s3::creds::Credentials;
 use s3::{Bucket, BucketConfiguration};
 use std::fs::{remove_file, File};
@@ -18,10 +18,13 @@ type GenericErr = Box<dyn std::error::Error + Send + Sync>;
 #[derive(Parser)]
 enum Cli {
     Upload {
-        /// Bucket to upload the file to (will be created if it doesn't exist)
+        #[arg(short, long)]
         bucket: String,
-        // object: Option<String>,
+        #[arg(long)]
+        object: Option<String>,
         /// File to upload.
+        #[arg(long)]
+        #[clap(required = true)]
         files: Vec<PathBuf>,
     },
     Download {
@@ -46,9 +49,9 @@ fn ensure_bucket(bucket: Bucket) -> Result<Bucket, GenericErr> {
 }
 
 fn upload_file(bucket: Bucket, filename: &str, object_path: &str) -> Result<(), GenericErr> {
-    println!("uploading: {}", &filename);
+    debug!("uploading: {}", &filename);
     let bucket = ensure_bucket(bucket)?;
-    // println!("bucket is ok");
+    // debug!("bucket is ok");
     let mut async_output_file = File::open(filename).expect("Unable to create file");
     // let file_size = file.metadata()?.len();
     let status_code = bucket.put_object_stream(&mut async_output_file, object_path)?;
@@ -73,15 +76,19 @@ fn prepare_tar(paths: &Vec<PathBuf>) -> Result<String, GenericErr> {
         .flat_map(|e| e.unwrap());
     for name in files {
         tar_builder.append_path(&name)?;
-        info!("Added {:?}", name.to_str());
+        debug!("Added {:?}", name.to_str());
     }
     tar_builder.finish()?;
 
     Ok(tar_name.into())
 }
 
-fn upload_artifacts(bucket: Bucket, dirs: &Vec<PathBuf>, object: Option<String>) -> String {
-    let filename = prepare_tar(&dirs).unwrap();
+fn upload_artifacts(
+    bucket: Bucket,
+    dirs: &Vec<PathBuf>,
+    object: Option<String>,
+) -> Result<String, GenericErr> {
+    let filename = prepare_tar(&dirs)?;
     // TODO: generate random name
 
     let object = object.unwrap_or_else(|| {
@@ -89,12 +96,11 @@ fn upload_artifacts(bucket: Bucket, dirs: &Vec<PathBuf>, object: Option<String>)
         id.to_string()
     });
     let name = &bucket.name.clone();
-    upload_file(bucket, &filename, &object).expect("Failed to upload file");
-    remove_file(filename).expect("Failed to remove artifact archive");
-    info!("Uploaded files at {:?} to {}/{}", dirs, name, object);
-    object.to_string()
+    upload_file(bucket, &filename, &object)?;
+    remove_file(filename)?;
+    debug!("Uploaded files at {:?} to {}/{}", dirs, name, object);
+    Ok(object.to_string())
 }
-
 
 fn download_artifacts(
     bucket: &Bucket,
@@ -102,16 +108,13 @@ fn download_artifacts(
     local_path: &str,
     decode_location: &str,
 ) -> Result<(), GenericErr> {
-    let mut async_output_file = File::create(local_path).expect("Unable to create file");
+    let mut output_file = File::create(local_path).expect("Unable to create file");
     let response_data_stream = bucket.get_object(object_path)?;
-    async_output_file.write_all(response_data_stream.bytes())?;
-    // println!("file downloaded: {}", response_data_stream);
+    output_file.write_all(response_data_stream.bytes())?;
     let tar = File::open(local_path).unwrap();
     let dec = GzDecoder::new(tar);
     let mut a = tar::Archive::new(dec);
-    // TODO: handle err
-    a.unpack(decode_location).unwrap();
-    Ok(())
+    a.unpack(decode_location).map(|_| Ok(()))?
 }
 
 fn main() -> Result<(), GenericErr> {
@@ -123,38 +126,22 @@ fn main() -> Result<(), GenericErr> {
     let password_key = "zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG";
     let endpoint = "https://play.min.io";
 
-    // let static_provider = StaticProvider::new(access_key, password_key, None);
-
-    // let client = ClientBuilder::new(endpoint.parse()?)
-    //     .provider(Some(Box::new(static_provider)))
-    //     .build()?;
-    // let bucket_name = "rust-s3-test";
-    // let region = "us-east-1".parse()?;
     let region = Region::Custom {
         region: "us-east-1".to_owned(),
-        endpoint: "https://play.min.io".to_owned(),
+        endpoint: endpoint.to_owned(),
     };
     let credentials = Credentials::new(Some(access_key), Some(password_key), None, None, None)?;
-    // let static_provider = StaticProvider::new(access_key, password_key, None);
-
-    // let client = ClientBuilder::new(endpoint.parse()?)
-    //     .provider(Some(Box::new(static_provider)))
-    //     .build()?;
-
-    // println!("bucket exists: {}", client.bucket_exists(&BucketArgs::new("bucket")?).await?);
-    // client.make_bucket(&MakeBucketArgs::new("bucket")?).await.ok();
 
     let result = match args {
         Cli::Upload {
             bucket: bucket_name,
             files,
-            // object,
+            object,
         } => {
             let bucket = Bucket::new(&bucket_name, region, credentials)?.with_path_style();
-            println!("{:?}", &bucket);
-            let archive_name = upload_artifacts(bucket, &files, None);
+            let archive_name = upload_artifacts(bucket, &files, object)?;
             // write archive name to file
-            println!("{}", &archive_name);
+            debug!("{}", &archive_name);
         }
         Cli::Download {
             bucket: bucket_name,
@@ -163,7 +150,7 @@ fn main() -> Result<(), GenericErr> {
             let download_path = "local_download.tar.gz";
             let decode_location = ".";
             let bucket = Bucket::new(&bucket_name, region, credentials)?.with_path_style();
-            println!("downloading :{}", &object);
+            debug!("downloading :{}", &object);
             download_artifacts(&bucket, &object, download_path, decode_location)?;
             remove_file(download_path).unwrap();
         }
