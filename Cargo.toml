@@ -14,6 +14,8 @@ flate2 = "1.0.20"
 rust-s3 ={version= "0.34.0", features = ["sync-rustls-tls"], default-features = false}
 aws-region = "0.25.4"
 aws-creds = "0.37.0"
+toml = "0.8.19"
+serde = "1.0.207"
 
 [dependencies.uuid]
 version = "1.10.0"
