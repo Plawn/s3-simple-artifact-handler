@@ -48,6 +48,7 @@ enum Cli {
     },
 }
 
+/// Ensures the bucket exists
 fn ensure_bucket(bucket: Bucket) -> Result<Bucket, GenericErr> {
     if !bucket.exists()? {
         let r = Bucket::create_with_path_style(
@@ -146,6 +147,7 @@ fn get_bucket(bucket_name: String, path: &PathBuf) -> Result<Bucket, GenericErr>
     conf_file.read_to_string(&mut buf)?;
     let conf: S3Conf = toml::from_str(&buf)?;
     let region = Region::Custom {
+        // should be a configuration too
         region: "us-east-1".to_owned(),
         endpoint: conf.endpoint,
     };
