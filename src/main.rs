@@ -62,21 +62,15 @@ fn ensure_bucket(bucket: Bucket, credentials: &Credentials) -> Result<Bucket, Ge
     let url = action.sign(SIGNATURE_TIMEOUT);
     let client = Client::new();
     let response = client.get(url).send()?;
-    // TODO: finish this
-    // if response.status().as_u16() > 399 {
-    //     let q = CreateBucket::new(bucket, credentials);
-    // }
-    // TODO
-    // if !bucket.exists()? {
-    //     let r = Bucket::create_with_path_style(
-    //         &bucket.name,
-    //         bucket.region.clone(),
-    //         bucket.credentials().unwrap(),
-    //         BucketConfiguration::default(),
-    //     )?
-    //     .bucket;
-    //     return Ok(r);
-    // }
+    if response.status().as_u16() > 399 {
+        debug!("creating bucket");
+        let q = CreateBucket::new(&bucket, credentials);
+        let response = client.put(q.sign(SIGNATURE_TIMEOUT)).send()?;
+        if !response.status().is_success() {
+            debug!("{}", &response.status());
+            panic!("Failed to create bucket");
+        }
+    }
     Ok(bucket)
 }
 
@@ -94,7 +88,7 @@ fn s3_upload(
 
     let multipart = CreateMultipartUpload::parse_response(&body)?;
 
-    println!(
+    debug!(
         "multipart upload created - upload id: {}",
         multipart.upload_id()
     );
@@ -113,7 +107,7 @@ fn s3_upload(
         .get(ETAG)
         .expect("every UploadPart request returns an Etag");
 
-    println!("etag: {}", etag.to_str().unwrap());
+    debug!("etag: {}", etag.to_str().unwrap());
 
     let action = CompleteMultipartUpload::new(
         &bucket,
@@ -129,9 +123,9 @@ fn s3_upload(
         .body(action.body())
         .send()?
         .error_for_status()?;
-    let body = resp.text()?;
-    println!("it worked! {body}");
-
+    if !resp.status().is_success() {
+        panic!("upload failed");
+    }
     Ok(())
 }
 
@@ -143,10 +137,8 @@ fn upload_file(
 ) -> Result<(), GenericErr> {
     debug!("uploading: {}", &filename);
     let bucket = ensure_bucket(bucket, credentials)?;
-    // debug!("bucket is ok");
     let upload_file = File::open(filename).expect("Unable to create file");
-    // let file_size = file.metadata()?.len();
-    let status_code = s3_upload(upload_file, &bucket, &credentials, object_path)?;
+    s3_upload(upload_file, &bucket, &credentials, object_path)?;
     Ok(())
 }
 fn recurse_files(path: impl AsRef<str>) -> Result<Vec<PathBuf>, PatternError> {
@@ -219,7 +211,7 @@ fn download_artifacts(
     let client = Client::new();
     // let response_data_stream = bucket.get_object(object_path)?;
     let mut response = client.get(signed_url).send()?;
-    response.copy_to(&mut output_file);
+    response.copy_to(&mut output_file)?;
     // output_file.write_all(response_data_stream.bytes())?;
     let tar = File::open(local_path).unwrap();
     let dec = GzDecoder::new(tar);
