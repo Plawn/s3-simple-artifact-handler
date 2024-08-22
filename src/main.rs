@@ -1,13 +1,13 @@
 use std::io::{Error, Read, Write};
 use std::path::PathBuf;
 
-use awsregion::Region;
 use clap::Parser;
 use flate2::write::GzEncoder;
 use flate2::{read::GzDecoder, Compression};
 use glob::{glob, PatternError};
 use log::debug;
 use s3::creds::Credentials;
+use s3::region::Region;
 use s3::{Bucket, BucketConfiguration};
 use std::fs::{remove_file, File};
 use uuid::Uuid;
