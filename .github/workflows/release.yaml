@@ -19,8 +19,6 @@ jobs:
     runs-on: ubuntu-latest    
     env:
       RUSTFLAGS: '-C target-feature=+crt-static'
-      OPENSSL_STATIC: 1
-      OPENSSL_DIR: /usr/local/openssl
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -44,7 +42,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: binaries
-          path: target/release/s3-simple-artifact-handler
+          path: target/release/**
 
   create_tag_and_release:
     needs: build
