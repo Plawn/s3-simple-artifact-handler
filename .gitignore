@@ -2,3 +2,4 @@
 local_*
 *.adoc
 *.html
+config.toml

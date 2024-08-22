@@ -11,16 +11,10 @@ log = "0.4.22"
 tar = "0.4.41"
 glob = "0.3.1"
 flate2 = "1.0.20"
-rust-s3 = { version= "0.34.0", features = ["sync-rustls-tls"], default-features = false}
-# aws-region = "0.25.4"
-# aws-creds = "0.37.0"
 toml = "0.8.19"
 serde = "1.0.207"
-
-[dependencies.attohttpc]
-default-features = false
-features = ["rustls"]
-version = "0.26.1"
+reqwest = {version="0.12.7", features=["rustls-tls", "blocking"], default-features = false}
+rusty-s3 = "0.5.0"
 
 [dependencies.uuid]
 version = "1.10.0"
