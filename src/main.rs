@@ -7,22 +7,17 @@ use flate2::write::GzEncoder;
 use flate2::{read::GzDecoder, Compression};
 use glob::{glob, PatternError};
 use log::debug;
-use reqwest::blocking::Client;
-use reqwest::header::ETAG;
-use rusty_s3::actions::{
-    CompleteMultipartUpload, CreateBucket, CreateMultipartUpload, GetObject, HeadBucket, S3Action,
-    UploadPart,
-};
+
 use rusty_s3::{Bucket, Credentials, UrlStyle};
 use std::fs::{remove_file, File};
-use std::iter;
 use uuid::Uuid;
+use serde::Deserialize;
+
+use s3_simple_artifact_handler::S3Client;
 
 type GenericErr = Box<dyn std::error::Error + Send + Sync>;
 
-const SIGNATURE_TIMEOUT: Duration = Duration::from_secs(1);
 
-use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
 struct S3Conf {
@@ -56,89 +51,16 @@ enum Cli {
     },
 }
 
-/// Ensures the bucket exists
-fn ensure_bucket(bucket: Bucket, credentials: &Credentials) -> Result<Bucket, GenericErr> {
-    let action = HeadBucket::new(&bucket, Some(credentials));
-    let url = action.sign(SIGNATURE_TIMEOUT);
-    let client = Client::new();
-    let response = client.get(url).send()?;
-    if response.status().as_u16() > 399 {
-        debug!("creating bucket");
-        let q = CreateBucket::new(&bucket, credentials);
-        let response = client.put(q.sign(SIGNATURE_TIMEOUT)).send()?;
-        if !response.status().is_success() {
-            debug!("{}", &response.status());
-            panic!("Failed to create bucket");
-        }
-    }
-    Ok(bucket)
-}
-
-fn s3_upload(
-    file: File,
-    bucket: &Bucket,
-    credentials: &Credentials,
-    object: &str,
-) -> Result<(), GenericErr> {
-    let client = Client::new();
-    let action = CreateMultipartUpload::new(bucket, Some(credentials), object);
-    let url = action.sign(SIGNATURE_TIMEOUT);
-    let resp = client.post(url).send()?.error_for_status()?;
-    let body = resp.text()?;
-
-    let multipart = CreateMultipartUpload::parse_response(&body)?;
-
-    debug!(
-        "multipart upload created - upload id: {}",
-        multipart.upload_id()
-    );
-
-    let part_upload = UploadPart::new(
-        bucket,
-        Some(credentials),
-        object,
-        1,
-        multipart.upload_id(),
-    );
-    let url = part_upload.sign(SIGNATURE_TIMEOUT);
-    let resp = client.put(url).body(file).send()?.error_for_status()?;
-    let etag = resp
-        .headers()
-        .get(ETAG)
-        .expect("every UploadPart request returns an Etag");
-
-    debug!("etag: {}", etag.to_str().unwrap());
-
-    let action = CompleteMultipartUpload::new(
-        bucket,
-        Some(credentials),
-        object,
-        multipart.upload_id(),
-        iter::once(etag.to_str().unwrap()),
-    );
-    let url = action.sign(SIGNATURE_TIMEOUT);
-
-    let resp = client
-        .post(url)
-        .body(action.body())
-        .send()?
-        .error_for_status()?;
-    if !resp.status().is_success() {
-        panic!("upload failed");
-    }
-    Ok(())
-}
-
 fn upload_file(
-    bucket: Bucket,
-    credentials: &Credentials,
+    client: &S3Client,
     filename: &str,
     object_path: &str,
 ) -> Result<(), GenericErr> {
     debug!("uploading: {}", &filename);
-    let bucket = ensure_bucket(bucket, credentials)?;
+    // let bucket = ensure_bucket(bucket, credentials)?;
     let upload_file = File::open(filename).expect("Unable to create file");
-    s3_upload(upload_file, &bucket, credentials, object_path)?;
+    // s3_upload(upload_file, &bucket, credentials, object_path)?;
+    client.put(object_path, upload_file)?;
     Ok(())
 }
 fn recurse_files(path: impl AsRef<str>) -> Result<Vec<PathBuf>, PatternError> {
@@ -172,8 +94,7 @@ fn prepare_tar(paths: &[PathBuf]) -> Result<String, GenericErr> {
 }
 
 fn upload_artifacts(
-    bucket: Bucket,
-    credentials: &Credentials,
+    client: &S3Client,
     dirs: &Vec<PathBuf>,
     object: Option<String>,
 ) -> Result<String, GenericErr> {
@@ -183,8 +104,7 @@ fn upload_artifacts(
         let id = Uuid::new_v4();
         id.to_string()
     });
-    // let name = &bucket.name.clone();
-    let upload_result = upload_file(bucket, credentials, &filename, &object);
+    let upload_result = upload_file(&client, &filename, &object);
     remove_file(filename)?;
     match upload_result {
         Ok(_) => {
@@ -196,22 +116,12 @@ fn upload_artifacts(
 }
 
 fn download_artifacts(
-    bucket: &Bucket,
-    credentials: &Credentials,
+    client: &S3Client,
     object_path: &str,
     local_path: &str,
     decode_location: &str,
 ) -> Result<(), GenericErr> {
-    let mut action = GetObject::new(bucket, Some(credentials), object_path);
-    action
-        .query_mut()
-        .insert("response-cache-control", "no-cache, no-store");
-    let signed_url = action.sign(SIGNATURE_TIMEOUT);
-    let mut output_file = File::create(local_path).expect("Unable to create file");
-    let client = Client::new();
-    // let response_data_stream = bucket.get_object(object_path)?;
-    let mut response = client.get(signed_url).send()?;
-    response.copy_to(&mut output_file)?;
+    client.get(object_path, local_path)?;
     // output_file.write_all(response_data_stream.bytes())?;
     let tar = File::open(local_path).unwrap();
     let dec = GzDecoder::new(tar);
@@ -219,7 +129,7 @@ fn download_artifacts(
     a.unpack(decode_location).map(|_| Ok(()))?
 }
 
-fn get_bucket(bucket_name: String, path: &PathBuf) -> Result<(Bucket, Credentials), GenericErr> {
+fn get_client(bucket_name: String, path: &PathBuf) -> Result<S3Client, GenericErr> {
     let mut conf_file = File::open(path).expect("Unable to create file");
     let mut buf = String::new();
     conf_file.read_to_string(&mut buf)?;
@@ -233,7 +143,7 @@ fn get_bucket(bucket_name: String, path: &PathBuf) -> Result<(Bucket, Credential
         region,
     )
     .unwrap();
-    Ok((bucket, credentials))
+    Ok(S3Client::new(bucket, credentials))
 }
 
 fn main() -> Result<(), GenericErr> {
@@ -246,8 +156,8 @@ fn main() -> Result<(), GenericErr> {
             object,
             config_file,
         } => {
-            let (bucket, credentials) = get_bucket(bucket_name, &config_file)?;
-            let archive_name = upload_artifacts(bucket, &credentials, &files, object)?;
+            let client = get_client(bucket_name, &config_file)?.ensure()?;
+            let archive_name = upload_artifacts(&client, &files, object)?;
             println!("{}", &archive_name);
         }
         Cli::Download {
@@ -258,11 +168,10 @@ fn main() -> Result<(), GenericErr> {
             let download_path = "local_download.tar.gz";
             let decode_location = ".";
             // let bucket = Bucket::new(&bucket_name, region, credentials)?.with_path_style();
-            let (bucket, credentials) = get_bucket(bucket_name, &config_file)?;
+            let client = get_client(bucket_name, &config_file)?;
             debug!("downloading :{}", &object);
             download_artifacts(
-                &bucket,
-                &credentials,
+                &client,
                 &object,
                 download_path,
                 decode_location,
