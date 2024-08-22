@@ -150,7 +150,12 @@ fn upload_file(
     Ok(())
 }
 fn recurse_files(path: impl AsRef<str>) -> Result<Vec<PathBuf>, PatternError> {
-    let k = glob(path.as_ref()).map(|res| res.into_iter().map(|e| e.unwrap()).collect::<Vec<_>>());
+    let p = if path.as_ref().ends_with("/") {
+        path.as_ref().to_owned() + "**/*"
+    } else {
+        path.as_ref().to_owned()
+    };
+    let k = glob(&p).map(|res| res.into_iter().map(|e| e.unwrap()).collect::<Vec<_>>());
     k
 }
 fn prepare_tar(paths: &[PathBuf]) -> Result<String, GenericErr> {

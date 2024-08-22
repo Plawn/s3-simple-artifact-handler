@@ -3,3 +3,4 @@ local_*
 *.adoc
 *.html
 config.toml
+export.tar.gz
