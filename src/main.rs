@@ -1,4 +1,4 @@
-use std::io::{Error, Read, Write};
+use std::io::Read;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -81,7 +81,7 @@ fn s3_upload(
     object: &str,
 ) -> Result<(), GenericErr> {
     let client = Client::new();
-    let action = CreateMultipartUpload::new(&bucket, Some(&credentials), object);
+    let action = CreateMultipartUpload::new(bucket, Some(credentials), object);
     let url = action.sign(SIGNATURE_TIMEOUT);
     let resp = client.post(url).send()?.error_for_status()?;
     let body = resp.text()?;
@@ -94,8 +94,8 @@ fn s3_upload(
     );
 
     let part_upload = UploadPart::new(
-        &bucket,
-        Some(&credentials),
+        bucket,
+        Some(credentials),
         object,
         1,
         multipart.upload_id(),
@@ -110,8 +110,8 @@ fn s3_upload(
     debug!("etag: {}", etag.to_str().unwrap());
 
     let action = CompleteMultipartUpload::new(
-        &bucket,
-        Some(&credentials),
+        bucket,
+        Some(credentials),
         object,
         multipart.upload_id(),
         iter::once(etag.to_str().unwrap()),
@@ -138,7 +138,7 @@ fn upload_file(
     debug!("uploading: {}", &filename);
     let bucket = ensure_bucket(bucket, credentials)?;
     let upload_file = File::open(filename).expect("Unable to create file");
-    s3_upload(upload_file, &bucket, &credentials, object_path)?;
+    s3_upload(upload_file, &bucket, credentials, object_path)?;
     Ok(())
 }
 fn recurse_files(path: impl AsRef<str>) -> Result<Vec<PathBuf>, PatternError> {
@@ -147,8 +147,8 @@ fn recurse_files(path: impl AsRef<str>) -> Result<Vec<PathBuf>, PatternError> {
     } else {
         path.as_ref().to_owned()
     };
-    let k = glob(&p).map(|res| res.into_iter().map(|e| e.unwrap()).collect::<Vec<_>>());
-    k
+    
+    glob(&p).map(|res| res.into_iter().map(|e| e.unwrap()).collect::<Vec<_>>())
 }
 fn prepare_tar(paths: &[PathBuf]) -> Result<String, GenericErr> {
     let tar_name = "export.tar.gz";
@@ -186,13 +186,13 @@ fn upload_artifacts(
     // let name = &bucket.name.clone();
     let upload_result = upload_file(bucket, credentials, &filename, &object);
     remove_file(filename)?;
-    return match upload_result {
+    match upload_result {
         Ok(_) => {
             debug!("Uploaded files at {:?} to {}/{}", dirs, "name", object);
             Ok(object.to_string())
         }
         Err(err) => Err(err),
-    };
+    }
 }
 
 fn download_artifacts(
@@ -202,7 +202,7 @@ fn download_artifacts(
     local_path: &str,
     decode_location: &str,
 ) -> Result<(), GenericErr> {
-    let mut action = GetObject::new(&bucket, Some(credentials), object_path);
+    let mut action = GetObject::new(bucket, Some(credentials), object_path);
     action
         .query_mut()
         .insert("response-cache-control", "no-cache, no-store");
