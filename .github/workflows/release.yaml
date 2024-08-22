@@ -42,7 +42,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: binaries
-          path: target/release/**
+          path: target/x86_64-unknown-linux-musl/s3-simple-artifact-handler
 
   create_tag_and_release:
     needs: build
