@@ -106,7 +106,7 @@ impl S3Client {
         let action = HeadBucket::new(&self.bucket, Some(&self.credentials));
         let url = action.sign(SIGNATURE_TIMEOUT);
         let client = Client::new();
-        let response = client.get(url).send()?;
+        let response = client.head(url).send()?;
         if response.status().as_u16() > 399 {
             debug!("creating bucket");
             let q = CreateBucket::new(&self.bucket, &self.credentials);
