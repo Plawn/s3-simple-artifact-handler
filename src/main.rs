@@ -18,6 +18,8 @@ use uuid::Uuid;
 
 type GenericErr = Box<dyn std::error::Error + Send + Sync>;
 
+const VERSION: &str = "0.1.0";
+
 #[derive(Deserialize, Debug)]
 struct S3Conf {
     endpoint: String,
@@ -27,6 +29,7 @@ struct S3Conf {
 
 #[derive(Parser)]
 enum Cli {
+    Version,
     Upload {
         #[arg(long)]
         config_file: PathBuf,
@@ -160,6 +163,9 @@ fn main() -> Result<(), GenericErr> {
         .init();
 
     match args {
+        Cli::Version {} => {
+            println!("{}", VERSION);
+        }
         Cli::Upload {
             bucket: bucket_name,
             files,
