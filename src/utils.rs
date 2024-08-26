@@ -7,7 +7,7 @@ use rusty_s3::actions::{
     CompleteMultipartUpload, CreateBucket, CreateMultipartUpload, GetObject, HeadBucket, S3Action,
     UploadPart,
 };
-use rusty_s3::{Bucket, Credentials, UrlStyle};
+use rusty_s3::{Bucket, Credentials};
 use std::time::Duration;
 const SIGNATURE_TIMEOUT: Duration = Duration::from_secs(1);
 type GenericErr = Box<dyn std::error::Error + Send + Sync>;

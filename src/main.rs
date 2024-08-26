@@ -1,6 +1,5 @@
 use std::io::Read;
 use std::path::PathBuf;
-use std::time::Duration;
 
 use clap::Parser;
 use flate2::write::GzEncoder;
