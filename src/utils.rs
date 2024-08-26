@@ -1,6 +1,6 @@
 use std::fs::File;
 
-use log::debug;
+use log;
 use reqwest::blocking::Client;
 use reqwest::header::ETAG;
 use rusty_s3::actions::{
@@ -59,7 +59,7 @@ impl S3Client {
 
         let multipart = CreateMultipartUpload::parse_response(&body)?;
 
-        debug!(
+        log::debug!(
             "multipart upload created - upload id: {}",
             multipart.upload_id()
         );
@@ -78,7 +78,7 @@ impl S3Client {
             .get(ETAG)
             .expect("every UploadPart request returns an Etag");
 
-        debug!("etag: {}", etag.to_str().unwrap());
+        log::debug!("etag: {}", etag.to_str().unwrap());
 
         let action = CompleteMultipartUpload::new(
             &self.bucket,
@@ -108,11 +108,11 @@ impl S3Client {
         let client = Client::new();
         let response = client.head(url).send()?;
         if response.status().as_u16() > 399 {
-            debug!("creating bucket");
+            log::debug!("creating bucket");
             let q = CreateBucket::new(&self.bucket, &self.credentials);
             let response = client.put(q.sign(SIGNATURE_TIMEOUT)).send()?;
             if !response.status().is_success() {
-                debug!("{}", &response.status());
+                log::debug!("{}", &response.status());
                 panic!("Failed to create bucket");
             }
         }

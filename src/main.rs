@@ -6,7 +6,7 @@ use env_logger::Builder;
 use flate2::write::GzEncoder;
 use flate2::{read::GzDecoder, Compression};
 use glob::{glob, PatternError};
-use log::{debug, LevelFilter};
+use log::LevelFilter;
 
 use chrono::Local;
 use rusty_s3::{Bucket, Credentials, UrlStyle};
@@ -53,7 +53,7 @@ enum Cli {
 }
 
 fn upload_file(client: &S3Client, filename: &str, object_path: &str) -> Result<(), GenericErr> {
-    debug!("uploading: {}", &filename);
+    log::debug!("uploading: {}", &filename);
     // let bucket = ensure_bucket(bucket, credentials)?;
     let upload_file = File::open(filename).expect("Unable to create file");
     // s3_upload(upload_file, &bucket, credentials, object_path)?;
@@ -83,7 +83,7 @@ fn prepare_tar(paths: &[PathBuf]) -> Result<String, GenericErr> {
         .flat_map(|e| e.unwrap());
     for name in files {
         tar_builder.append_path(&name)?;
-        debug!("Added {:?}", name.to_str());
+        log::debug!("Added {:?}", name.to_str());
     }
     tar_builder.finish()?;
 
@@ -105,7 +105,7 @@ fn upload_artifacts(
     remove_file(filename)?;
     match upload_result {
         Ok(_) => {
-            debug!("Uploaded files at {:?} to {}/{}", dirs, "name", object);
+            log::debug!("Uploaded files at {:?} to {}/{}", dirs, "name", object);
             Ok(object.to_string())
         }
         Err(err) => Err(err),
@@ -180,7 +180,7 @@ fn main() -> Result<(), GenericErr> {
             let decode_location = ".";
             // let bucket = Bucket::new(&bucket_name, region, credentials)?.with_path_style();
             let client = get_client(bucket_name, &config_file)?;
-            debug!("downloading :{}", &object);
+            log::debug!("downloading :{}", &object);
             download_artifacts(&client, &object, download_path, decode_location)?;
             if remove {
                 client.delete(&object)?;
