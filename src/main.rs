@@ -1,7 +1,7 @@
 use std::io::Read;
 use std::path::PathBuf;
 
-use clap::Parser;
+use clap::{ArgAction, Parser};
 use flate2::write::GzEncoder;
 use flate2::{read::GzDecoder, Compression};
 use glob::{glob, PatternError};
@@ -47,6 +47,8 @@ enum Cli {
         bucket: String,
         #[arg(long)]
         object: String,
+        #[arg(long, action=ArgAction::SetFalse)]
+        remove: bool,
     },
 }
 
@@ -163,6 +165,7 @@ fn main() -> Result<(), GenericErr> {
             bucket: bucket_name,
             object,
             config_file,
+            remove,
         } => {
             let download_path = "local_download.tar.gz";
             let decode_location = ".";
@@ -175,6 +178,9 @@ fn main() -> Result<(), GenericErr> {
                 download_path,
                 decode_location,
             )?;
+            if remove {
+                client.delete(&object)?;
+            }
             remove_file(download_path).unwrap();
         }
     };

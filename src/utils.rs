@@ -4,8 +4,8 @@ use log::debug;
 use reqwest::blocking::Client;
 use reqwest::header::ETAG;
 use rusty_s3::actions::{
-    CompleteMultipartUpload, CreateBucket, CreateMultipartUpload, GetObject, HeadBucket, S3Action,
-    UploadPart,
+    CompleteMultipartUpload, CreateBucket, CreateMultipartUpload, DeleteObject, GetObject,
+    HeadBucket, S3Action, UploadPart,
 };
 use rusty_s3::{Bucket, Credentials};
 use std::time::Duration;
@@ -37,10 +37,17 @@ impl S3Client {
             .insert("response-cache-control", "no-cache, no-store");
         let signed_url = action.sign(SIGNATURE_TIMEOUT);
         let mut output_file = File::create(local_path).expect("Unable to create file");
-        let client = Client::new();
         // let response_data_stream = bucket.get_object(object_path)?;
-        let mut response = client.get(signed_url).send()?;
+        let mut response = self.client.get(signed_url).send()?;
         response.copy_to(&mut output_file)?;
+        Ok(())
+    }
+
+    pub fn delete(&self, object: &str) -> Result<(), GenericErr> {
+        let action = DeleteObject::new(&self.bucket, Some(&self.credentials), object)
+            .sign(SIGNATURE_TIMEOUT);
+        // TODO
+        let _ = self.client.delete(action).send()?;
         Ok(())
     }
 
