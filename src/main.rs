@@ -25,6 +25,7 @@ struct S3Conf {
     endpoint: String,
     access_key: String,
     pass_key: String,
+    region: Option<String>,
 }
 
 #[derive(Parser)]
@@ -123,26 +124,25 @@ fn download_artifacts(
 ) -> Result<(), GenericErr> {
     client.get(object_path, local_path)?;
     // output_file.write_all(response_data_stream.bytes())?;
-    let tar = File::open(local_path).unwrap();
+    let tar = File::open(local_path)?;
     let dec = GzDecoder::new(tar);
     let mut a = tar::Archive::new(dec);
     a.unpack(decode_location).map(|_| Ok(()))?
 }
 
 fn get_client(bucket_name: String, path: &PathBuf) -> Result<S3Client, GenericErr> {
-    let mut conf_file = File::open(path).expect("Unable to create file");
+    let mut conf_file = File::open(path)?;
     let mut buf = String::new();
     conf_file.read_to_string(&mut buf)?;
     let conf: S3Conf = toml::from_str(&buf)?;
     let credentials = Credentials::new(&conf.access_key, &conf.pass_key);
-    let region = "minio";
+    let region = conf.region.unwrap_or("minio".to_owned());
     let bucket = Bucket::new(
-        conf.endpoint.parse().unwrap(),
+        conf.endpoint.parse()?,
         UrlStyle::Path,
         bucket_name,
         region,
-    )
-    .unwrap();
+    )?;
     Ok(S3Client::new(bucket, credentials))
 }
 
@@ -164,7 +164,7 @@ fn main() -> Result<(), GenericErr> {
 
     match args {
         Cli::Version {} => {
-            println!("{}", VERSION);
+            println!("simple-artifact-handler: {}", VERSION);
         }
         Cli::Upload {
             bucket: bucket_name,
@@ -191,7 +191,7 @@ fn main() -> Result<(), GenericErr> {
             if remove {
                 client.delete(&object)?;
             }
-            remove_file(download_path).unwrap();
+            remove_file(download_path)?;
         }
     };
 
