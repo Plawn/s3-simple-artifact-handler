@@ -2,21 +2,21 @@ use std::io::Read;
 use std::path::PathBuf;
 
 use clap::{ArgAction, Parser};
+use env_logger::Builder;
 use flate2::write::GzEncoder;
 use flate2::{read::GzDecoder, Compression};
 use glob::{glob, PatternError};
-use log::debug;
+use log::{debug, LevelFilter};
 
+use chrono::Local;
 use rusty_s3::{Bucket, Credentials, UrlStyle};
-use std::fs::{remove_file, File};
-use uuid::Uuid;
-use serde::Deserialize;
-
 use s3_simple_artifact_handler::S3Client;
+use serde::Deserialize;
+use std::fs::{remove_file, File};
+use std::io::Write;
+use uuid::Uuid;
 
 type GenericErr = Box<dyn std::error::Error + Send + Sync>;
-
-
 
 #[derive(Deserialize, Debug)]
 struct S3Conf {
@@ -52,11 +52,7 @@ enum Cli {
     },
 }
 
-fn upload_file(
-    client: &S3Client,
-    filename: &str,
-    object_path: &str,
-) -> Result<(), GenericErr> {
+fn upload_file(client: &S3Client, filename: &str, object_path: &str) -> Result<(), GenericErr> {
     debug!("uploading: {}", &filename);
     // let bucket = ensure_bucket(bucket, credentials)?;
     let upload_file = File::open(filename).expect("Unable to create file");
@@ -70,7 +66,7 @@ fn recurse_files(path: impl AsRef<str>) -> Result<Vec<PathBuf>, PatternError> {
     } else {
         path.as_ref().to_owned()
     };
-    
+
     glob(&p).map(|res| res.into_iter().map(|e| e.unwrap()).collect::<Vec<_>>())
 }
 fn prepare_tar(paths: &[PathBuf]) -> Result<String, GenericErr> {
@@ -150,6 +146,19 @@ fn get_client(bucket_name: String, path: &PathBuf) -> Result<S3Client, GenericEr
 fn main() -> Result<(), GenericErr> {
     let args = Cli::parse();
 
+    Builder::new()
+        .format(|buf, record| {
+            writeln!(
+                buf,
+                "{} [{}] - {}",
+                Local::now().format("%Y-%m-%dT%H:%M:%S"),
+                record.level(),
+                record.args()
+            )
+        })
+        .filter(None, LevelFilter::Info)
+        .init();
+
     match args {
         Cli::Upload {
             bucket: bucket_name,
@@ -172,12 +181,7 @@ fn main() -> Result<(), GenericErr> {
             // let bucket = Bucket::new(&bucket_name, region, credentials)?.with_path_style();
             let client = get_client(bucket_name, &config_file)?;
             debug!("downloading :{}", &object);
-            download_artifacts(
-                &client,
-                &object,
-                download_path,
-                decode_location,
-            )?;
+            download_artifacts(&client, &object, download_path, decode_location)?;
             if remove {
                 client.delete(&object)?;
             }
