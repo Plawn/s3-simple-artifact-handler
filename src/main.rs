@@ -103,7 +103,7 @@ fn upload_artifacts(
         let id = Uuid::new_v4();
         id.to_string()
     });
-    let upload_result = upload_file(&client, &filename, &object);
+    let upload_result = upload_file(client, &filename, &object);
     remove_file(filename)?;
     match upload_result {
         Ok(_) => {

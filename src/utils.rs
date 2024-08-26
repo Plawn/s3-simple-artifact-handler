@@ -23,11 +23,11 @@ impl S3Client {
     pub fn new(bucket: Bucket, credentials: Credentials) -> Self {
         let client = Client::new();
 
-        return Self {
+        Self {
             client,
             bucket,
             credentials,
-        };
+        }
     }
 
     pub fn get(&self, name: &str, local_path: &str) -> Result<(), GenericErr> {
